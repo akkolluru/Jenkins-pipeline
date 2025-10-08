@@ -1,42 +1,45 @@
-pipeline {
+ pipeline {
   agent none
+  options { timestamps(); timeout(time: 15, unit: 'MINUTES') }
 
   stages {
-    stage('Checkout') { steps { checkout scm } }
 
-    stage('Build') {
+    /* 1) WHERE AM I — run on Controller (built-in) */
+    stage('Where am I (Controller)') {
+      agent { label 'built-in' }
       steps {
-        script {
-          if (isUnix()) {
-            sh '''
-              rm -rf out
-              mkdir -p out
-              javac -d out src/hello/Hello.java
-            '''
-          } else {
-            bat '''
-              if exist out rmdir /s /q out
-              mkdir out
-              javac -d out src\\hello\\Hello.java
-            '''
-          }
-        }
+        echo "NODE = ${env.NODE_NAME}"
+        echo "WORKSPACE = ${env.WORKSPACE}"
       }
     }
 
-    stage('Run') {
+    /* 2) BUILD & RUN — on Windows Agent (label: win) */
+    stage('Build on Windows Agent') {
+      agent { label 'win' }
       steps {
-        script {
-          if (isUnix()) {
-            sh '''
-              java -cp out hello.Hello
-              echo "Build_OK" > artifact.txt
-            '''
-          } else {
-            bat '''
-              java -cp out hello.Hello
-              echo Build_OK > artifact.txt
-            '''
+        bat """
+        if exist out rmdir /s /q out
+        mkdir out
+        javac -d out src\\hello\\Hello.java
+        java -cp out hello.Hello
+        echo Build_OK > artifact.txt
+        """
+      }
+    }
+
+    /* 3) PARALLEL DEMO — Controller vs Agent at the same time */
+    stage('Parallel: Controller vs Agent') {
+      parallel {
+        stage('Controller lane') {
+          agent { label 'built-in' }
+          steps {
+            echo "PARALLEL NODE = ${env.NODE_NAME}"
+          }
+        }
+        stage('Agent lane') {
+          agent { label 'win' }
+          steps {
+            bat "echo PARALLEL NODE = %NODE_NAME%"
           }
         }
       }
